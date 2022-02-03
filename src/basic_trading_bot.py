@@ -11,8 +11,8 @@ from config import wazirx_config
 CANDLE_DURATION_IN_MIN = 1
 
 RSI_PERIOD = 14
-RSI_OVERBOUGHT = 70 #70
-RSI_OVERSOLD = 30 #30
+RSI_OVERBOUGHT = 60 #70
+RSI_OVERSOLD = 40 #30
 
 CCXT_TICKER_NAME = 'BTC/USDT'
 TRADING_TICKER_NAME = 'btcusdt'
@@ -48,11 +48,11 @@ def get_trade_recommendation(ticker_df):
     final_result = 'WAIT'
 
     # BUY or SELL based on MACD crossover points and the RSI value at that point
-    macd, signal, hist = talib.MACD(ticker_df['close'], fastperiod=12, slowperiod=26, signalperiod=9)
+    macd, signal, hist = talib.MACD(ticker_df['close'], fastperiod = 12, slowperiod = 26, signalperiod = 9)
     last_hist = hist.iloc[-1]
     prev_hist = hist.iloc[-2]
     if not np.isnan(prev_hist) and not np.isnan(last_hist):
-        # If hist value has change from negative to positive or vice versa, it indicates a crossover
+        # If hist value has changed from negative to positive or vice versa, it indicates a crossover
         macd_crossover = (abs(last_hist + prev_hist)) != (abs(last_hist) + abs(prev_hist))
         if macd_crossover:
             macd_result = 'BUY' if last_hist > 0 else 'SELL'
@@ -60,14 +60,15 @@ def get_trade_recommendation(ticker_df):
     print(f'4DEBUG - {datetime.now().strftime("%d/%m/%Y %H:%M:%S")}:: MACD RESULT: {macd_result}')
 
     if macd_result != 'WAIT':
-        rsi = talib.RSI(ticker_df['close'], RSI_PERIOD)
-        last_rsi = rsi.iloc[-1]
+        rsi = talib.RSI(ticker_df['close'], timeperiod = 14)
+        # Consider last 3 RSI values
+        last_rsi_values = rsi.iloc[-3:]
 
-        print(f'4DEBUG: RSI: {last_rsi}')
+        print(f'4DEBUG: LAST 3 RSI: {last_rsi_values}')
 
-        if (last_rsi <= RSI_OVERSOLD):
+        if (last_rsi_values.min() <= RSI_OVERSOLD):
             final_result = 'BUY'
-        elif (last_rsi >= RSI_OVERBOUGHT):
+        elif (last_rsi_values.max() >= RSI_OVERBOUGHT):
             final_result = 'SELL'
 
 
@@ -94,10 +95,11 @@ def execute_trade(trade_rec_type, trading_ticker):
                   f"{trading_ticker}, {side_value}, {current_price}, {scrip_quantity}, {int(time.time() * 1000)} ")
             with open(f'orders_{trading_ticker}_{CANDLE_DURATION_IN_MIN}m.csv', 'a') as orders_file:
                 orders_file.write(f"\n{datetime.now().strftime('%d/%m/%Y %H:%M:%S')},{trading_ticker}, {side_value}, {current_price}, {scrip_quantity}")
-            # order_response = wx_client.send("create_order",
-        #                                 {"symbol": trading_ticker, "side": side_value, "type": "limit",
-        #                                  "price": current_price, "quantity": scrip_quantity,
-        #                                  "recvWindow": 10000, "timestamp": int(time.time() * 1000)})
+
+            order_response = wx_client.send("create_order",
+                                        {"symbol": trading_ticker, "side": side_value, "type": "limit",
+                                         "price": current_price, "quantity": scrip_quantity,
+                                         "recvWindow": 10000, "timestamp": int(time.time() * 1000)})
 
             #print(f'ORDER RESPONSE: {order_response}')
             print(f"ORDER PLACED")
