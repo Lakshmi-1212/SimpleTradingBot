@@ -8,11 +8,11 @@ import talib
 from config import wazirx_config
 
 # Initialize Variables
-CANDLE_DURATION_IN_MIN = 1
+CANDLE_DURATION_IN_MIN = 5
 
 RSI_PERIOD = 14
-RSI_OVERBOUGHT = 60 #70
-RSI_OVERSOLD = 40 #30
+RSI_OVERBOUGHT = 70
+RSI_OVERSOLD = 30
 
 CCXT_TICKER_NAME = 'BTC/USDT'
 TRADING_TICKER_NAME = 'btcusdt'
@@ -22,7 +22,6 @@ HOLDING_QUANTITY = 0
 
 exchange = ccxt.binance()
 wx_client = Client(api_key=wazirx_config.API_KEY, secret_key=wazirx_config.API_SECRET)
-
 
 # STEP 1: FETCH THE DATA
 def fetch_data(ticker):
@@ -57,31 +56,21 @@ def get_trade_recommendation(ticker_df):
         if macd_crossover:
             macd_result = 'BUY' if last_hist > 0 else 'SELL'
 
-    print(f'4DEBUG - {datetime.now().strftime("%d/%m/%Y %H:%M:%S")}:: MACD RESULT: {macd_result}')
-
     if macd_result != 'WAIT':
         rsi = talib.RSI(ticker_df['close'], timeperiod = 14)
         # Consider last 3 RSI values
         last_rsi_values = rsi.iloc[-3:]
-
-        print(f'4DEBUG: LAST 3 RSI: {last_rsi_values}')
 
         if (last_rsi_values.min() <= RSI_OVERSOLD):
             final_result = 'BUY'
         elif (last_rsi_values.max() >= RSI_OVERBOUGHT):
             final_result = 'SELL'
 
-
-    with open(f"data_{ticker_df.iloc[-1]['symbol'].replace('/','')}_{CANDLE_DURATION_IN_MIN}m.csv", 'a') as data_file:
-        data_file.write(
-            f"\n{datetime.now().strftime('%d/%m/%Y %H:%M:%S')},{ticker_df.iloc[-1]['close']},{final_result}")
-
     return final_result
 
 
 # STEP 3: EXECUTE THE TRADE
 def execute_trade(trade_rec_type, trading_ticker):
-
     global wx_client, HOLDING_QUANTITY
     order_placed = False
     side_value = 'buy' if (trade_rec_type == "BUY") else 'sell'
@@ -93,15 +82,12 @@ def execute_trade(trade_rec_type, trading_ticker):
             scrip_quantity = round(INVESTMENT_AMOUNT_DOLLARS/current_price,5) if trade_rec_type == "BUY" else HOLDING_QUANTITY
             print(f"PLACING ORDER {datetime.now().strftime('%d/%m/%Y %H:%M:%S')}: "
                   f"{trading_ticker}, {side_value}, {current_price}, {scrip_quantity}, {int(time.time() * 1000)} ")
-            with open(f'orders_{trading_ticker}_{CANDLE_DURATION_IN_MIN}m.csv', 'a') as orders_file:
-                orders_file.write(f"\n{datetime.now().strftime('%d/%m/%Y %H:%M:%S')},{trading_ticker}, {side_value}, {current_price}, {scrip_quantity}")
 
             order_response = wx_client.send("create_order",
                                         {"symbol": trading_ticker, "side": side_value, "type": "limit",
                                          "price": current_price, "quantity": scrip_quantity,
                                          "recvWindow": 10000, "timestamp": int(time.time() * 1000)})
 
-            #print(f'ORDER RESPONSE: {order_response}')
             print(f"ORDER PLACED")
             HOLDING_QUANTITY = scrip_quantity if trade_rec_type == "BUY" else HOLDING_QUANTITY
             order_placed = True
